@@ -18,7 +18,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-package com.sunlin.myvideo.HW;
+package com.sunlin.myvideo.Media;
 
 import java.nio.ByteBuffer;
 
@@ -72,6 +72,7 @@ public class NV21Convertor {
 	}
 
 	public void setEncoderColorFormat(int colorFormat) {
+
 		switch (colorFormat) {
 			case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar:
 			case MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedSemiPlanar:
@@ -114,7 +115,6 @@ public class NV21Convertor {
 		int min = buffer.capacity() < data.length ? buffer.capacity() : data.length;
 		buffer.put(result, 0, min);
 	}
-
 	public byte[] convert(byte[] data) {
 
 		// A buffer large enough for every case

@@ -1,4 +1,4 @@
-package com.sunlin.myvideo.HW;
+package com.sunlin.myvideo.Media;
 
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
