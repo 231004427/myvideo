@@ -9,21 +9,21 @@ public interface MLMSocketDelegate{
  *-12=用户已注册,-13=用户最大数,-11=系统错误
  *-23=房间最大数,-22=用户未注册,-24=已属于其他房间,-21=系统错误
  */
-    public void  MLMSocketDidConnectError(Integer error,String str,Integer from,Integer to,MLMTCPClient sender);
+    public void  MLMSocketDidConnectError(int error,String str,long from,long to,MLMTCPClient sender);
     //房间创建完成
-    public void MLMSocketDidRoom(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketDidRoom(long from,int to_room,MLMTCPClient sender);
     //退出房间
-    public void MLMSocketDidRoomUserOut(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketDidRoomUserOut(long from,int to_room,MLMTCPClient sender);
     //邀请加入
-    public void MLMSocketRoomRequest(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketRoomRequest(long from,int to_room,MLMTCPClient sender);
     //拒绝加入
-    public void MLMSocketRoomRefuse(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketRoomRefuse(long from,int to_room,MLMTCPClient sender);
     //进入房间
-    public void MLMSocketDidRoomUserIn(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketDidRoomUserIn(long from,int to_room,MLMTCPClient sender);
     //删除房间
-    public void MLMSocketRoomDel(Integer from,Integer to_room,MLMTCPClient sender);
+    public void MLMSocketRoomDel(long from,int to_room,MLMTCPClient sender);
     //用户成功登入
     public void MLMSocketDidConnect(MLMTCPClient sender);
     //数据传输
-    public void MLMGetMessage(Integer from,Integer type,byte[] data,MLMTCPClient sender);
+    public void MLMGetMessage(long from,int type,byte[] data,MLMTCPClient sender);
 }
