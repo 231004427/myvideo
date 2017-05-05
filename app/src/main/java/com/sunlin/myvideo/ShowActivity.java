@@ -11,10 +11,11 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.Toast;
 
-import com.sunlin.myvideo.Media.VideoDecode;
 import com.sunlin.myvideo.Media.VideoDecoder;
 import com.sunlin.myvideo.Media.VideoFileReader;
 import com.sunlin.myvideo.R;
@@ -32,23 +33,19 @@ import java.util.List;
 
 public class ShowActivity extends AppCompatActivity {
     private static String LOG_TAG="ShowActivity";
+    private Button btnSwitch=null;
     private SurfaceView mSurface = null;
     private SurfaceHolder mSurfaceHolder;
     private Thread mDecodeThread;
-    private MediaCodec mCodec;
-    private boolean mStopFlag = false;
-    private DataInputStream mInputStream;
     private String FileName = "test.h264";
-    private int Video_Width = 480;
-    private int Video_Height = 320;
-    private int FrameRate = 15;
-    private Boolean isUsePpsAndSps = false;
-    private String filePath = Environment.getExternalStorageDirectory() + "/" + FileName;
-    private Handler mHandler = new Handler() {
+
+
+    public Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
-            Toast.makeText(ShowActivity.this, "播放结束!", Toast.LENGTH_LONG).show();
+            btnSwitch.setEnabled(true);
+            Toast.makeText(ShowActivity.this, "播放结束!", Toast.LENGTH_SHORT).show();
         }
     };
 
@@ -60,6 +57,14 @@ public class ShowActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_show);
+        btnSwitch = (Button) findViewById(R.id.btn_switch);
+        btnSwitch.setEnabled(true);
+        btnSwitch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startDecodingThread();
+            }
+        });
         //保持屏幕常亮
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         //
@@ -72,6 +77,7 @@ public class ShowActivity extends AppCompatActivity {
 
                 //surfaceShow=holder.getSurface();
                 videoDecoder=new VideoDecoder(holder.getSurface(),0);
+                videoDecoder.start();
                 startDecodingThread();
             }
 
@@ -89,6 +95,18 @@ public class ShowActivity extends AppCompatActivity {
     private void startDecodingThread() {
         mDecodeThread = new Thread(new decodeH264Thread());
         mDecodeThread.start();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
     }
 
     /**
@@ -109,6 +127,7 @@ public class ShowActivity extends AppCompatActivity {
             //获取每一帧数据
             VideoFileReader videoReader=new VideoFileReader();
             videoReader.openVideoFile(getResources().openRawResource(R.raw.test));
+
             while(true){
                 byte[] iframe=videoReader.readIframe();
                 if(iframe==null)break;
@@ -117,7 +136,7 @@ public class ShowActivity extends AppCompatActivity {
                     case 0x05:
                         Log.d(LOG_TAG,"Nal type is IDR frame");
                         try {
-                            videoDecoder.initial(header_sps,header_pps);
+                            videoDecoder.initial(header_sps,header_pps,mHandler);
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
