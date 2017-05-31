@@ -37,23 +37,29 @@ public class MLMTCPClient{
     private Socket client;
     private OutputStream output;
     private InputStream input;
+    private byte[] buffWrite;
+    private byte[] buffRead;
 
-    private String tag;
-    private int userid;
-    private int groupid;
+    public String tag;
+    public int userid;
+    public int groupid;
+
 
     private MLMlib mlib=new MLMlib();
 
     public MLMSocketDelegate delegate;
 
-    public MLMTCPClient(String _host,int _port,String _tag,int _userid) {
+    public MLMTCPClient(String _host,int _port,String _tag,int _userid,int buffSize) {
         host = _host;
         port = _port;
         tag = _tag;
         userid =_userid;
+        //head=16
+        buffWrite = new byte[buffSize+MyHead.size];
+        buffRead = new byte[buffSize+MyHead.size];
     }
     public MLMTCPClient(String _tag,int _userid){
-        host = "192.168.2.122";//"192.168.43.149"
+        host = "192.168.2.122";//"192.168.43.149"192.168.2.122
         port = 8888;
         tag = _tag;
         userid=_userid;
@@ -73,35 +79,36 @@ public class MLMTCPClient{
             e.printStackTrace();
         }
     }
-    public void connectServer(){
+    public boolean connectServer(int buffSize){
         if(client==null){
-            new Thread() {
-                @Override
-                public void run() {
-                    try {
-                        client=new Socket();
-                        SocketAddress address=new InetSocketAddress(host,port);
-                        client.connect(address,1500);
-                        client.setTcpNoDelay(true);
-                        output=client.getOutputStream();
-                        input=client.getInputStream();
-                        //用户注册
-                        _sendMessage(output,"1",10,userid,0);
-                        //监听返回数据
-                        readMain(input);
 
-                    }  catch (UnknownHostException e) {
-                        e.printStackTrace();
-                        close();
-                        delegate.MLMSocketDidConnectError(-3,"服务无响应(-3)",0,0,MLMTCPClient.this);
-                    }catch (IOException e) {
-                        e.printStackTrace();
-                        close();
-                        delegate.MLMSocketDidConnectError(-3,"服务无响应(-3)",0,0,MLMTCPClient.this);
-                    }
-                }
-            }.start();
+            try {
+                client=new Socket();
+                SocketAddress address=new InetSocketAddress(host,port);
+                client.connect(address,1500);
+                client.setTcpNoDelay(true);
+                output=client.getOutputStream();
+                input=client.getInputStream();
+                buffWrite = new byte[buffSize+MyHead.size];
+                buffRead = new byte[buffSize+MyHead.size];
+                //用户注册
+                _sendMessage(output, new byte[]{1},10,userid,0);
+                //监听返回数据
+                readMain(input);
+
+            }  catch (UnknownHostException e) {
+                e.printStackTrace();
+                close();
+                delegate.MLMSocketDidConnectError(-3,"服务无响应(-3)",0,0,MLMTCPClient.this);
+                return false;
+            }catch (IOException e) {
+                e.printStackTrace();
+                close();
+                delegate.MLMSocketDidConnectError(-3,"服务无响应(-3)",0,0,MLMTCPClient.this);
+                return false;
+            }
         }
+        return true;
     }
     private void readMain(InputStream input){
         MyHead rec_head=new MyHead();
@@ -112,7 +119,6 @@ public class MLMTCPClient{
         rec_head.to=0;
         rec_head.t=0;
         rec_head.v=0;
-        byte[] data_buf=new byte[500000];
         byte[] response=new byte[1024*10];
 
         while (true){
@@ -126,10 +132,10 @@ public class MLMTCPClient{
                 for(int i=0;i<rec;i++){
 
                     if(rec_head.l==0){
-                        data_buf[j]=response[i];
+                        buffRead[j]=response[i];
                         j+=1;
                         if(j==head_size){
-                            if(mlib.getDataHead(data_buf,rec_head)< 0){break;}
+                            if(mlib.getDataHead(buffRead,rec_head)< 0){break;}
                             //如果数据为空
                             if(rec_head.l==0){
                                 //显示信息
@@ -145,14 +151,14 @@ public class MLMTCPClient{
                             }
                         }
                     }else {
-                        data_buf[j]=response[i];
+                        buffRead[j]=response[i];
                         j += 1;
                         z += 1;
                         if(z == rec_head.l)
                         {
                             //收取包完成
                             //显示信息
-                            _showMessage(rec_head.from,rec_head.to,rec_head.t,Arrays.copyOfRange(data_buf,head_size,j));
+                            _showMessage(rec_head.from,rec_head.to,rec_head.t,Arrays.copyOfRange(buffRead,head_size,j));
                             //重置
                             rec_head.l = 0;
                             rec_head.from=0;
@@ -172,6 +178,33 @@ public class MLMTCPClient{
             }
         }
 
+    }
+    //单发使用uid：60文本,61语音，图片62,文件63,位置64,touid max uint
+    public boolean sendByUserIdStr(String content,long toUid)
+    {
+        byte[] rawData=content.getBytes();
+        return _sendMessage(output,rawData,60,userid,toUid);
+    }
+    //视频=65
+    public boolean sendByUserIdByte(byte[] content,long toUid)
+    {
+        return _sendMessage(output,content,65,userid,toUid);
+    }
+
+    public boolean _sendMessage(OutputStream output,byte[] content,int type,int from,long to){
+
+        int size=mlib.buildData(buffWrite,type,from,to,content,content.length);
+        try {
+            output.write(buffWrite,0,size);
+            output.flush();
+            Log.e("send","("+size+")");
+        } catch (IOException e) {
+            e.printStackTrace();
+            close();
+            delegate.MLMSocketDidConnectError(-3,"发送失败(-3)",0,0,this);
+        }
+
+        return  true;
     }
     //处理消息
     private void _showMessage(long from,long to,int type,byte[] data){
@@ -243,20 +276,5 @@ public class MLMTCPClient{
 
         }
 
-    }
-    public boolean _sendMessage(OutputStream output,String content,int type,int from,int to){
-
-        byte[] rawData=content.getBytes();
-        byte[] buff = mlib.buildData(type,from,to,rawData,rawData.length);
-        try {
-            output.write(buff,0,buff.length);
-            output.flush();
-        } catch (IOException e) {
-            e.printStackTrace();
-            close();
-            delegate.MLMSocketDidConnectError(-3,"发送失败(-3)",0,0,this);
-        }
-
-        return  true;
     }
 }

@@ -18,31 +18,29 @@ public class MLMlib {
     }
     public native String stringFromJNI();
     //public native int buildData(byte[] buffer,int t,long from,long to,byte[] data);
-    public byte[] buildData(int t,long from,long to ,byte[] data,int data_size){
-        //head=16
-        byte[] dataResult = new byte[data_size+MyHead.size];
-        dataResult[0]=1;
-        dataResult[1]=(byte)t;
+    public int buildData(byte[] buff,int t,long from,long to ,byte[] data,int data_size){
+        buff[0]=1;
+        buff[1]=(byte)t;
 
-        dataResult[2]=0;
-        dataResult[3]=0;
+        buff[2]=0;
+        buff[3]=0;
 
-        dataResult[4]=(byte)((data_size>>>24)&0xFF);
-        dataResult[5]=(byte)((data_size>>>16)&0xFF);
-        dataResult[6]=(byte)((data_size>>>8)&0xFF);
-        dataResult[7]=(byte)((data_size>>>0)&0xFF);
+        buff[4]=(byte)((data_size>>>24)&0xFF);
+        buff[5]=(byte)((data_size>>>16)&0xFF);
+        buff[6]=(byte)((data_size>>>8)&0xFF);
+        buff[7]=(byte)((data_size>>>0)&0xFF);
 
-        dataResult[8]=(byte)((from>>>24)&0xFF);
-        dataResult[9]=(byte)((from>>>16)&0xFF);
-        dataResult[10]=(byte)((from>>>8)&0xFF);
-        dataResult[11]=(byte)((from>>>0)&0xFF);
+        buff[8]=(byte)((from>>>24)&0xFF);
+        buff[9]=(byte)((from>>>16)&0xFF);
+        buff[10]=(byte)((from>>>8)&0xFF);
+        buff[11]=(byte)((from>>>0)&0xFF);
 
-        dataResult[12]=(byte)((to>>>24)&0xFF);
-        dataResult[13]=(byte)((to>>>16)&0xFF);
-        dataResult[14]=(byte)((to>>>8)&0xFF);
-        dataResult[15]=(byte)((to>>>0)&0xFF);
-        System.arraycopy(data, 0, dataResult,MyHead.size, data_size);
-        return dataResult;
+        buff[12]=(byte)((to>>>24)&0xFF);
+        buff[13]=(byte)((to>>>16)&0xFF);
+        buff[14]=(byte)((to>>>8)&0xFF);
+        buff[15]=(byte)((to>>>0)&0xFF);
+        System.arraycopy(data, 0, buff,MyHead.size, data_size);
+        return data_size+MyHead.size;
     }
     /*
     uint8_t v;

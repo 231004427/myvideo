@@ -27,9 +27,9 @@ public class VideoDecoder {
     private Surface surface;
     // 0: live, 1: playback, 2: local file
     private int state = 0;
-    //视频数据
+    //视频数据队列
     private BlockingQueue<byte[]> video_data_Queue = new ArrayBlockingQueue<byte[]>(10000);
-    //音频数据
+    //音频数据队列
     private BlockingQueue<byte[]> audio_data_Queue = new ArrayBlockingQueue<byte[]>(10000);
 
     private boolean isReady = false;
@@ -61,6 +61,7 @@ public class VideoDecoder {
     }
     public void stopRunning() {
         isRuning=false;
+        isInit=false;
         video_data_Queue.clear();
         audio_data_Queue.clear();
     }
@@ -142,6 +143,10 @@ public class VideoDecoder {
             public void run() {
 
                 while (isRuning) {
+
+                    if(video_data_Queue.size()>300){
+                        video_data_Queue.clear();
+                    }
                     if (!video_data_Queue.isEmpty()){
                         int inIndex = -1;
                         try {

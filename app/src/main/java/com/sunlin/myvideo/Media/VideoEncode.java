@@ -5,6 +5,7 @@ import android.hardware.Camera;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.media.MediaRecorder;
 import android.os.Environment;
 import android.util.Log;
 import android.view.Surface;
@@ -38,8 +39,9 @@ public class VideoEncode implements Camera.PreviewCallback{
     MediaCodec mMediaCodec;
     int rotation;
     byte[] previewBuffer;
+    int buffSize;
 
-    MLMTCPClient server;
+    public MLMTCPClient server;
 
     public VideoEncode(int _rotation){
         path=Environment.getExternalStorageDirectory() + "/test.h264";
@@ -54,8 +56,15 @@ public class VideoEncode implements Camera.PreviewCallback{
         try{
             server=new MLMTCPClient(_tag,_userid);
             server.delegate=viewDelegate;
-            server.connectServer();
-            return  true;
+            //网络初始化
+            new Thread() {
+                @Override
+                public void run() {
+                    server.connectServer(buffSize);
+                }
+            }.start();
+            return true;
+
         }catch(Exception e){
             e.printStackTrace();
             return false;
@@ -63,7 +72,7 @@ public class VideoEncode implements Camera.PreviewCallback{
     }
     //关闭服务器
     public void closeServer(){
-
+        server.close();
     }
     //初始化编码器
     public boolean initMediaCodec() {
@@ -94,6 +103,7 @@ public class VideoEncode implements Camera.PreviewCallback{
             return true;
         } catch (IOException e) {
             e.printStackTrace();
+            mMediaCodec.release();
             return false;
         }
     }
@@ -118,7 +128,7 @@ public class VideoEncode implements Camera.PreviewCallback{
             List<Camera.Size> sizes = parameters.getSupportedPreviewSizes();
             for (Camera.Size size : sizes
                     ) {
-                if (size.width >= 480 && size.width <= 480 ) {
+                if (size.width >= 480 && size.width <= 640 ) {
                     width = size.width;
                     height= size.height;
                     Log.i(TAG, String.format("find preview size width=%d,height=%d",width,
@@ -135,7 +145,7 @@ public class VideoEncode implements Camera.PreviewCallback{
             //final int qFrameSize = cStride * height / 2;
             //this.previewBuffer = new byte[500000];
             //设置预览帧数FPS
-            parameters.setPreviewFpsRange(max[0], max[1]);
+            parameters.setPreviewFpsRange(15000, 15000);
             mCamera.setParameters(parameters);
             mCamera.autoFocus(null);
             //显示角度
@@ -146,8 +156,8 @@ public class VideoEncode implements Camera.PreviewCallback{
             //设置缓存
             int previewFormat = mCamera.getParameters().getPreviewFormat();
             Camera.Size previewSize = mCamera.getParameters().getPreviewSize();
-            int size = previewSize.width * previewSize.height * ImageFormat.getBitsPerPixel(previewFormat) / 8;
-            this.previewBuffer = new byte[size];
+            this.buffSize = previewSize.width * previewSize.height * ImageFormat.getBitsPerPixel(previewFormat) / 8;
+            this.previewBuffer = new byte[buffSize];
             return true;
         } catch (Exception e) {
             //StringWriter sw = new StringWriter();
@@ -168,12 +178,15 @@ public class VideoEncode implements Camera.PreviewCallback{
             //int previewFormat = mCamera.getParameters().getPreviewFormat();
             //Camera.Size previewSize = mCamera.getParameters().getPreviewSize();
             //int size = previewSize.width * previewSize.height * ImageFormat.getBitsPerPixel(previewFormat) / 8;
+             //mMediaCodec.start();
             mCamera.addCallbackBuffer(previewBuffer);
             mCamera.setPreviewCallbackWithBuffer(this);
             mCamera.startPreview();
+
             started = true;
             //发送数据
-            //senderRun.run();
+            Thread t = new Thread(senderRun);
+            t.start();
         }
     }
     /**
@@ -201,6 +214,7 @@ public class VideoEncode implements Camera.PreviewCallback{
     public synchronized void stopPreview() {
         if (mCamera != null) {
             mCamera.stopPreview();
+            //mMediaCodec.stop();
             mCamera.setPreviewCallbackWithBuffer(null);
             started = false;
         }
@@ -236,11 +250,13 @@ public class VideoEncode implements Camera.PreviewCallback{
         }
         return maxFps;
     }
-    byte[] mPpsSps = new byte[0];
+    byte[] pps = new byte[0];
+    byte[] sps = new byte[0];
     @Override
     public void onPreviewFrame(byte[] data, Camera camera) {
 
-            if (data == null || started==false) {
+            if (data == null || started==false ) {
+                this.mCamera.addCallbackBuffer(this.previewBuffer);
                 return;
             }
 
@@ -271,16 +287,48 @@ public class VideoEncode implements Camera.PreviewCallback{
                         outputBuffer.get(outData);
                         //记录pps和sps,
                         if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                            mPpsSps = outData;
+                            //分拆sps,pps
+                            int num = 0;
+                            int offset=0;
+                            for(num=0;num<outData.length;num++){
+                                if(num>3){
+                                    if(outData[num-3]==0&&
+                                            outData[num-2]==0&&
+                                            outData[num-1]==0&&
+                                            outData[num]==1){
+
+                                        byte[] result;
+                                        result=new byte[num-offset-3];
+                                        System.arraycopy(outData, offset, result, 0, result.length);
+                                        sps=result;
+                                        encDataList.add(result);
+                                        offset=result.length;
+                                    }
+                                }
+                                if(num==(outData.length-1)){
+                                    byte[] result;
+                                    result=new byte[outData.length-offset];
+                                    System.arraycopy(outData, offset, result, 0, result.length);
+                                    pps=result;
+                                    encDataList.add(result);
+                                }
+
+                            }
+
+
                         } else if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) {
                             //在关键帧前面加上pps和sps数据
-                            byte[] iframeData = new byte[mPpsSps.length + outData.length];
-                            System.arraycopy(mPpsSps, 0, iframeData, 0, mPpsSps.length);
-                            System.arraycopy(outData, 0, iframeData, mPpsSps.length, outData.length);
-                            outData = iframeData;
-                            Util.save(outData, 0, outData.length, path, true);
+                            //byte[] iframeData = new byte[mPpsSps.length + outData.length];
+                            //System.arraycopy(mPpsSps, 0, iframeData, 0, mPpsSps.length);
+                            //System.arraycopy(outData, 0, iframeData, mPpsSps.length, outData.length);
+                            //outData = iframeData;
+                            encDataList.add(outData);
+                            //Util.save(outData, 0, outData.length, path, true);
+
                         }else {
-                            Util.save(outData, 0, outData.length, path, true);
+                            encDataList.add(outData);
+                            //Util.save(outData, 0, outData.length, path, true);
+
                         }
                         mMediaCodec.releaseOutputBuffer(outputBufferIndex, false);
                         outputBufferIndex = mMediaCodec.dequeueOutputBuffer(bufferInfo, 0);
@@ -314,9 +362,15 @@ public class VideoEncode implements Camera.PreviewCallback{
                     if (encDataList.size() == 0)
                     {
                         empty = true;
+                    } else if(encDataList.size()>300){ //缓存满了清空
+                        encDataList.clear();
+                        empty = true;
                     }
-                    else
+                    else{
                         encData = encDataList.remove(0);
+                        //发送数据
+                        server.sendByUserIdByte(encData,2);
+                    }
                 }
                 if (empty)
                 {
